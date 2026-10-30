@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Build + testes (unitários e integração com Postgres via Testcontainers) + pacote ZIP.
+  # O deploy na AWS entra quando o Gateway / VPC do lab estiverem definidos.
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build, test & package
+        run: ./gradlew build --console=plain
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: build/reports/tests/test
+          retention-days: 7
+
+      - name: Upload Lambda package
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-lambda-zip
+          path: build/distributions/auth-lambda.zip
+          retention-days: 14
