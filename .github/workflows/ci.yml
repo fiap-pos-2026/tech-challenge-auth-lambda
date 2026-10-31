@@ -81,7 +81,8 @@ jobs:
     name: Plan
     needs: [build-and-test, validate]
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # Só em PR. Em workflow_dispatch o Apply também roda e os dois brigam pelo lock DynamoDB.
+    if: github.event_name == 'pull_request'
     defaults:
       run:
         working-directory: infra
