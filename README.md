@@ -100,8 +100,39 @@ Requer JDK 21+ (o Gradle baixa o toolchain 21 se necessário) e Docker para os t
 
 Gera `build/distributions/auth-lambda.zip` (classes + `lib/`), pronto para upload na Lambda.
 
+## Infraestrutura (Terraform)
+
+`infra/` provisiona, em cima do que já existe nos outros repos (lidos via remote state):
+
+- Lambda `java21` nas subnets privadas da VPC do `tech-challenge-db-infra`, com SG próprio (o SG do RDS já libera a VPC)
+- Logs em JSON no CloudWatch
+- Integração e rotas `POST /auth` + `GET /auth/.well-known/*` na HTTP API do `tech-challenge-k8s-infra`, com permissão de invoke
+
+As rotas da Lambda ficam neste repo para evitar dependência circular: o `iss` do token é a URL do próprio Gateway, então o Gateway precisa existir antes. A role de execução é a `LabRole` do AWS Academy, onde criar role não é permitido.
+
+**Ordem de apply:** `tech-challenge-db-infra` → `tech-challenge-k8s-infra` → `tech-challenge-auth-lambda`.
+
+Local (com as credenciais do lab exportadas):
+
+```bash
+./gradlew build
+cd infra
+cp backend.hcl.example backend.hcl   # preencher bucket/tabela
+terraform init -backend-config backend.hcl
+TF_VAR_state_bucket=... TF_VAR_db_password=... TF_VAR_jwt_private_key="$(cat auth-private.pem)" terraform apply
+```
+
 ## CI/CD
 
-`.github/workflows/ci.yml` roda build, testes e empacota o ZIP em todo PR e push na `main`, publicando o pacote como artifact. O deploy na AWS e a rota `POST /auth` no Gateway entram na próxima etapa.
+`.github/workflows/ci.yml`:
+
+| Evento | Jobs |
+|---|---|
+| Pull request | build + testes + ZIP, `terraform fmt/validate`, `terraform plan` |
+| Push na `main` / manual | build + testes + ZIP, `terraform validate`, `terraform apply` (ambiente `homolog`) + smoke test |
+
+O smoke test confere o JWKS e se um CPF inválido devolve 400, sem depender de dados no banco.
+
+Secrets usados: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` (renovar a cada início do lab), `TF_STATE_BUCKET`, `TF_LOCK_TABLE`, `TF_VAR_DB_PASSWORD` e `AUTH_JWT_PRIVATE_KEY`.
 
 Não commite chaves, senhas ou endpoints reais aqui.

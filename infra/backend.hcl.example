@@ -1,0 +1,5 @@
+bucket         = "SEU-BUCKET-DE-STATE"
+key            = "auth-lambda/homolog/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "SUA-TABELA-DE-LOCK"
+encrypt        = true

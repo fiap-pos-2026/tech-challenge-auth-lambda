@@ -24,3 +24,13 @@ bin/
 !src/test/resources/certs/*.pem
 samconfig.toml
 .aws-sam/
+
+### Terraform (infra/) ###
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+backend.hcl
+crash.log
+tfplan
