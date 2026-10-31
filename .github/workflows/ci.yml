@@ -1,0 +1,192 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # AWS Academy Learner Lab costuma ser us-east-1 (OIDC/IAM IdP não é permitido no role voclabs).
+  AWS_REGION: us-east-1
+  TF_IN_AUTOMATION: "true"
+  TF_STATE_KEY: auth-lambda/homolog/terraform.tfstate
+
+jobs:
+  # Build + testes (unitários e integração com Postgres via Testcontainers) + pacote ZIP.
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build, test & package
+        run: ./gradlew build --console=plain
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: build/reports/tests/test
+          retention-days: 7
+
+      - name: Upload Lambda package
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-lambda-zip
+          path: build/distributions/auth-lambda.zip
+          retention-days: 14
+
+  validate:
+    name: Terraform Fmt & Validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (sem backend)
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+  plan:
+    name: Plan
+    needs: [build-and-test, validate]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Lambda package
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-lambda-zip
+          path: build/distributions
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Configure AWS credentials (Academy keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ env.TF_STATE_KEY }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform plan
+        env:
+          TF_VAR_state_bucket: ${{ secrets.TF_STATE_BUCKET }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+          TF_VAR_jwt_private_key: ${{ secrets.AUTH_JWT_PRIVATE_KEY }}
+        run: terraform plan -no-color -input=false
+
+  apply:
+    name: Apply (homolog)
+    needs: [build-and-test, validate]
+    runs-on: ubuntu-latest
+    # Push em main ou re-run manual (ex.: após db-infra / k8s-infra apply completarem).
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    environment: homolog
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - name: Check JWT key secret
+        # Roda antes do checkout: infra/ ainda não existe
+        working-directory: ${{ github.workspace }}
+        env:
+          AUTH_JWT_PRIVATE_KEY: ${{ secrets.AUTH_JWT_PRIVATE_KEY }}
+        run: |
+          test -n "$AUTH_JWT_PRIVATE_KEY" || { echo "Secret AUTH_JWT_PRIVATE_KEY ausente (PEM PKCS#8 do JWT de cliente)"; exit 1; }
+
+      - uses: actions/checkout@v4
+
+      - name: Download Lambda package
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-lambda-zip
+          path: build/distributions
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials (Academy keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ env.TF_STATE_KEY }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform apply
+        env:
+          TF_VAR_state_bucket: ${{ secrets.TF_STATE_BUCKET }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+          TF_VAR_jwt_private_key: ${{ secrets.AUTH_JWT_PRIVATE_KEY }}
+        run: terraform apply -auto-approve -input=false
+
+      # Não depende de dados no banco: JWKS (chave carregada) e CPF inválido (rejeitado antes do JDBC)
+      - name: Smoke test
+        run: |
+          AUTH_URL="$(terraform output -raw auth_url)"
+          JWKS_URL="$(terraform output -raw jwks_url)"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors "$JWKS_URL" | grep -q '"kid"'
+          status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$AUTH_URL" \
+            -H 'Content-Type: application/json' -d '{"cpf":"000.000.000-00"}')
+          test "$status" = "400" || { echo "esperado 400 para CPF inválido, veio $status"; exit 1; }
+          echo "Smoke test ok"
