@@ -45,7 +45,7 @@ curl -X POST "$GATEWAY_URL/auth" -H 'Content-Type: application/json' -d '{"cpf":
 
 CPF, e-mail e telefone **não** vão no token.
 
-A função também publica a chave pública para quem valida o token (core e authorizer do Gateway):
+A função também publica a chave pública para quem valida o token (o core, que confere assinatura, `iss` e `aud`):
 
 - `GET /auth/.well-known/jwks.json`
 - `GET /auth/.well-known/openid-configuration`
@@ -107,6 +107,31 @@ Gera `build/distributions/auth-lambda.zip` (classes + `lib/`), pronto para uploa
 - Lambda `java21` nas subnets privadas da VPC do `tech-challenge-db-infra`, com SG próprio (o SG do RDS já libera a VPC)
 - Logs em JSON no CloudWatch
 - Integração e rotas `POST /auth` + `GET /auth/.well-known/*` na HTTP API do `tech-challenge-k8s-infra`, com permissão de invoke
+
+```mermaid
+flowchart LR
+  C(["Cliente"]) -->|"POST /auth"| GW
+  Core["tech-challenge-core<br/>(valida o JWT)"] -->|"GET /auth/.well-known/jwks.json"| GW
+
+  subgraph k8s["tech-challenge-k8s-infra"]
+    GW["API Gateway HTTP API"]
+  end
+
+  subgraph this["este repositório (infra/)"]
+    R["rotas + integração<br/>+ permissão de invoke"]
+    L["Lambda java21<br/>AuthHandler"]
+    LG["CloudWatch Logs<br/>(JSON)"]
+    SG{{"SG da Lambda"}}
+  end
+
+  subgraph db["tech-challenge-db-infra"]
+    RDS[("RDS PostgreSQL<br/>tabela customers")]
+  end
+
+  GW --> R --> L
+  L --> LG
+  L -->|"subnets privadas"| SG -->|"5432 · somente leitura"| RDS
+```
 
 As rotas da Lambda ficam neste repo para evitar dependência circular: o `iss` do token é a URL do próprio Gateway, então o Gateway precisa existir antes. A role de execução é a `LabRole` do AWS Academy, onde criar role não é permitido.
 
