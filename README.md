@@ -50,6 +50,8 @@ A função também publica a chave pública para quem valida o token (o core, qu
 - `GET /auth/.well-known/jwks.json`
 - `GET /auth/.well-known/openid-configuration`
 
+Decisões relacionadas: [RFC-002 — autenticação por CPF](https://github.com/fiap-pos-2026/tech-challenge-core/blob/main/docs/arquitetura/rfc/RFC-002-autenticacao-cliente-cpf.md), [ADR-004 — formato e validação do JWT](https://github.com/fiap-pos-2026/tech-challenge-core/blob/main/docs/arquitetura/adr/ADR-004-jwt-cliente-validado-no-core.md), [ADR-005 — Lambda lê o banco direto](https://github.com/fiap-pos-2026/tech-challenge-core/blob/main/docs/arquitetura/adr/ADR-005-lambda-le-banco-direto.md). Índice completo em [`docs/arquitetura`](https://github.com/fiap-pos-2026/tech-challenge-core/blob/main/docs/arquitetura/README.md) no core.
+
 ## Stack
 
 Java 21 (runtime gerenciado `java21`), Spring Security OAuth2 JOSE (mesmo `NimbusJwtEncoder` do core, sem subir contexto Spring Boot, para manter o cold start baixo), JDBC puro com driver PostgreSQL, Gradle. Testes com JUnit 5, Mockito e Testcontainers.
@@ -70,7 +72,7 @@ src/main/java/.../auth
 | Variável | Obrigatória | Descrição |
 |---|---|---|
 | `JDBC_URL` | sim | `jdbc:postgresql://<host>:5432/<db>` |
-| `JDBC_USERNAME` / `JDBC_PASSWORD` | sim | usuário de leitura do banco |
+| `JDBC_USERNAME` / `JDBC_PASSWORD` | sim | usuário do banco (a função só executa `SELECT` em `customers`) |
 | `JWT_PRIVATE_KEY` | sim | PEM PKCS#8 (`BEGIN PRIVATE KEY`); a pública é derivada dela |
 | `JWT_KEY_ID` | sim | `kid` do header, ex.: `auth-lambda-homolog-202610` |
 | `JWT_ISSUER` | não | padrão `tech-challenge-auth-lambda` |
