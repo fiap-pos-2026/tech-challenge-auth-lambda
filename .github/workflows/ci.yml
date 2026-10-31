@@ -134,6 +134,14 @@ jobs:
       run:
         working-directory: infra
     steps:
+      - name: Check JWT key secret
+        # Roda antes do checkout: infra/ ainda não existe
+        working-directory: ${{ github.workspace }}
+        env:
+          AUTH_JWT_PRIVATE_KEY: ${{ secrets.AUTH_JWT_PRIVATE_KEY }}
+        run: |
+          test -n "$AUTH_JWT_PRIVATE_KEY" || { echo "Secret AUTH_JWT_PRIVATE_KEY ausente (PEM PKCS#8 do JWT de cliente)"; exit 1; }
+
       - uses: actions/checkout@v4
 
       - name: Download Lambda package
