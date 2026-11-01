@@ -49,8 +49,8 @@ resource "aws_lambda_function" "auth" {
   environment {
     variables = {
       JDBC_URL        = local.jdbc_url
-      JDBC_USERNAME   = local.db_username
-      JDBC_PASSWORD   = var.db_password
+      JDBC_USERNAME   = local.lambda_db_username
+      JDBC_PASSWORD   = local.lambda_db_password
       JWT_PRIVATE_KEY = var.jwt_private_key
       JWT_KEY_ID      = var.jwt_key_id
       JWT_ISSUER      = local.jwt_issuer

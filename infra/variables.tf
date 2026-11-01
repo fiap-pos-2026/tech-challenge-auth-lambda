@@ -63,6 +63,19 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "db_reader_username" {
+  description = "Usuário só de leitura criado pelo Liquibase do core (changeset 025)"
+  type        = string
+  default     = "auth_lambda_reader"
+}
+
+variable "db_reader_password" {
+  description = "Senha do usuário só de leitura (secret AUTH_DB_READER_PASSWORD). Vazio = usa o usuário da aplicação"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "jwt_private_key" {
   description = "PEM PKCS#8 da chave privada do JWT de cliente (secret AUTH_JWT_PRIVATE_KEY)"
   type        = string

@@ -81,6 +81,13 @@ src/main/java/.../auth
 
 Handler: `br.com.fiap.pos.tech_challenge.auth.AuthHandler::handleRequest`
 
+### Usuário do banco
+
+A função se conecta com o usuário **`auth_lambda_reader`**, que só consegue fazer `SELECT` nas colunas
+`_uuid`, `_name`, `_active`, `_document_type` e `_document` da tabela `customers`. Quem cria esse
+usuário é o Liquibase do core (changeset `025`), com a senha do secret `AUTH_DB_READER_PASSWORD`
+(o mesmo valor nos dois repositórios). Sem esse secret, o Terraform cai no usuário da aplicação.
+
 ### Chaves
 
 Cada ambiente tem **seu próprio** par RSA, diferente do par usado pelo login de funcionários do core. A chave privada fica só em secret (GitHub / Secrets Manager), nunca no repositório.
@@ -160,6 +167,6 @@ TF_VAR_state_bucket=... TF_VAR_db_password=... TF_VAR_jwt_private_key="$(cat aut
 
 O smoke test confere o JWKS e se um CPF inválido devolve 400, sem depender de dados no banco.
 
-Secrets usados: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` (renovar a cada início do lab), `TF_STATE_BUCKET`, `TF_LOCK_TABLE`, `TF_VAR_DB_PASSWORD` e `AUTH_JWT_PRIVATE_KEY`.
+Secrets usados: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` (renovar a cada início do lab), `TF_STATE_BUCKET`, `TF_LOCK_TABLE`, `TF_VAR_DB_PASSWORD`, `AUTH_JWT_PRIVATE_KEY` e `AUTH_DB_READER_PASSWORD`.
 
 Não commite chaves, senhas ou endpoints reais aqui.

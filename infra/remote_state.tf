@@ -33,6 +33,12 @@ locals {
   jdbc_url           = try(local.db_outputs.jdbc_url, "")
   db_username        = try(local.db_outputs.rds_username, "")
 
+  # Usuário só de leitura (SELECT em colunas de customers) quando a senha foi informada;
+  # sem ela, cai no usuário da aplicação para não quebrar ambientes antigos.
+  use_db_reader      = var.db_reader_password != ""
+  lambda_db_username = local.use_db_reader ? var.db_reader_username : local.db_username
+  lambda_db_password = local.use_db_reader ? var.db_reader_password : var.db_password
+
   api_gateway_id       = try(local.k8s_outputs.api_gateway_id, "")
   api_gateway_endpoint = try(local.k8s_outputs.api_gateway_endpoint, "")
 

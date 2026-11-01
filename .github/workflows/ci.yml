@@ -130,6 +130,7 @@ jobs:
           TF_VAR_aws_region: ${{ env.AWS_REGION }}
           TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
           TF_VAR_jwt_private_key: ${{ secrets.AUTH_JWT_PRIVATE_KEY }}
+          TF_VAR_db_reader_password: ${{ secrets.AUTH_DB_READER_PASSWORD }}
         run: terraform plan -no-color -input=false
 
   apply:
@@ -195,6 +196,7 @@ jobs:
           TF_VAR_aws_region: ${{ env.AWS_REGION }}
           TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
           TF_VAR_jwt_private_key: ${{ secrets.AUTH_JWT_PRIVATE_KEY }}
+          TF_VAR_db_reader_password: ${{ secrets.AUTH_DB_READER_PASSWORD }}
         run: terraform apply -auto-approve -input=false
 
       # Não depende de dados no banco: JWKS (chave carregada) e CPF inválido (rejeitado antes do JDBC)
